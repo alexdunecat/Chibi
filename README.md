@@ -66,4 +66,4 @@ https://github.com/alexdunecat/Chibi/releases/latest/download/module.json
 ## Разработка
 
 - `npm ci && npm test` — проверка определения категорий на заглушках Foundry (без запуска самого Foundry).
-- Релиз: опубликуйте на GitHub релиз с тегом вида `v1.0.1`. Workflow `Release` сам подставит версию в `module.json`, соберёт `module.zip` и приложит оба файла к релизу, после чего Foundry увидит обновление.
+- Релиз: поднимите `version` в `module.json` и запушьте тег вида `v1.0.1` (`git tag v1.0.1 && git push origin v1.0.1`). Workflow `Release` сам подставит версию, соберёт `module.zip` и опубликует релиз с `module.json` и `module.zip`, после чего Foundry увидит обновление.
