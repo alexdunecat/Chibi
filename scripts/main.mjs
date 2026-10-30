@@ -1,9 +1,9 @@
 /**
  * PF1 Chat Images
  *
- * Подменяет картинку в сообщениях чата (Foundry VTT v11, Pathfinder 1e 10.x)
- * на заранее подготовленную картинку по категории действия.
- * Сами сообщения не изменяются: подмена делается при отрисовке на каждом клиенте.
+ * Когда игрок совершает действие (Foundry VTT v11, Pathfinder 1e 10.x), с заданным шансом
+ * показывает слева от чата полупрозрачную картинку, подготовленную для категории действия.
+ * Сами сообщения не изменяются.
  */
 
 const MODULE_ID = "pf1-chat-images";
@@ -31,6 +31,9 @@ const RANGED_ACTIONS = ["rwak", "twak", "rsak", "rcman"];
 const PHYSICAL_ITEM_TYPES = ["weapon", "equipment", "consumable", "loot", "container"];
 const SAVES = { will: "saveWill", fort: "saveFort", ref: "saveRef" };
 
+/** Сколько ждать окончания анимации Dice So Nice, мс. */
+const DICE_WAIT_TIMEOUT = 10000;
+
 const setting = (key) => game.settings.get(MODULE_ID, key);
 
 /* -------------------------------------------- */
@@ -45,7 +48,6 @@ Hooks.once("init", () => {
     config: true,
     type: Boolean,
     default: true,
-    onChange: rerenderChat,
   });
 
   game.settings.register(MODULE_ID, "audience", {
@@ -60,7 +62,6 @@ Hooks.once("init", () => {
       all: `${MODULE_ID}.Settings.Audience.All`,
     },
     default: "players",
-    onChange: rerenderChat,
   });
 
   game.settings.register(MODULE_ID, "critOverride", {
@@ -70,7 +71,55 @@ Hooks.once("init", () => {
     config: true,
     type: Boolean,
     default: true,
-    onChange: rerenderChat,
+  });
+
+  game.settings.register(MODULE_ID, "chance", {
+    name: `${MODULE_ID}.Settings.Chance.Name`,
+    hint: `${MODULE_ID}.Settings.Chance.Hint`,
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 100, step: 5 },
+    default: 30,
+  });
+
+  game.settings.register(MODULE_ID, "critAlways", {
+    name: `${MODULE_ID}.Settings.CritAlways.Name`,
+    hint: `${MODULE_ID}.Settings.CritAlways.Hint`,
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true,
+  });
+
+  game.settings.register(MODULE_ID, "opacity", {
+    name: `${MODULE_ID}.Settings.Opacity.Name`,
+    hint: `${MODULE_ID}.Settings.Opacity.Hint`,
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0.1, max: 1, step: 0.05 },
+    default: 1,
+  });
+
+  game.settings.register(MODULE_ID, "fade", {
+    name: `${MODULE_ID}.Settings.Fade.Name`,
+    hint: `${MODULE_ID}.Settings.Fade.Hint`,
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 50, step: 5 },
+    default: 20,
+  });
+
+  game.settings.register(MODULE_ID, "duration", {
+    name: `${MODULE_ID}.Settings.Duration.Name`,
+    hint: `${MODULE_ID}.Settings.Duration.Hint`,
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 1, max: 15, step: 0.5 },
+    default: 4,
   });
 
   game.settings.register(MODULE_ID, "size", {
@@ -79,9 +128,17 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 24, max: 256, step: 4 },
-    default: 48,
-    onChange: rerenderChat,
+    range: { min: 100, max: 800, step: 20 },
+    default: 320,
+  });
+
+  game.settings.register(MODULE_ID, "showForMe", {
+    name: `${MODULE_ID}.Settings.ShowForMe.Name`,
+    hint: `${MODULE_ID}.Settings.ShowForMe.Hint`,
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: true,
   });
 
   for (const category of CATEGORIES) {
@@ -93,36 +150,93 @@ Hooks.once("init", () => {
       type: String,
       filePicker: "image",
       default: `${DEFAULT_FOLDER}/${category}.webp`,
-      onChange: rerenderChat,
-    });
+      });
   }
 });
 
-/** Перерисовать уже показанные сообщения после смены настроек. */
-function rerenderChat() {
-  ui.chat?.render(true);
-}
-
 /* -------------------------------------------- */
-/*  Отрисовка сообщений                         */
+/*  Новые сообщения                             */
 /* -------------------------------------------- */
 
-Hooks.on("renderChatMessage", (message, html) => {
+// Срабатывает у каждого клиента только для новых сообщений, не при перерисовке чата
+Hooks.on("createChatMessage", async (message) => {
   try {
-    if (!setting("enabled")) return;
+    if (!setting("enabled") || !setting("showForMe")) return;
     if (!appliesTo(message)) return;
+    // Скрытые и слепые броски не раскрываем
+    if (!message.visible || message.isContentVisible === false) return;
 
-    const category = getCategory(message, html[0] ?? html);
+    const category = getCategory(message);
     if (!category) return;
+
+    if (!passesChance(message, category)) return;
 
     const src = setting(`img.${category}`)?.trim();
     if (!src) return;
 
-    applyImage(html[0] ?? html, src, category);
+    await waitForDice(message);
+    showImage(src, category);
   } catch (err) {
     console.error(`${MODULE_ID} | Ошибка при обработке сообщения ${message.id}`, err);
   }
 });
+
+/**
+ * Проверка шанса. Результат зависит от id сообщения, поэтому все участники
+ * видят (или не видят) одну и ту же картинку.
+ *
+ * @param {ChatMessage} message
+ * @param {string} category
+ * @returns {boolean}
+ */
+function passesChance(message, category) {
+  if (setting("critAlways") && (category === "critSuccess" || category === "critFailure")) return true;
+  const chance = Number(setting("chance")) || 0;
+  if (chance >= 100) return true;
+  if (chance <= 0) return false;
+  return hashPercent(message.id) < chance;
+}
+
+/**
+ * Число от 0 до 99, стабильное для одной строки.
+ *
+ * @param {string} str
+ * @returns {number}
+ */
+function hashPercent(str) {
+  let hash = 2166136261;
+  for (const ch of String(str)) {
+    hash ^= ch.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % 100;
+}
+
+/**
+ * Если включён Dice So Nice, ждёт, пока кубики этого сообщения докатятся,
+ * чтобы картинка крита не опережала анимацию.
+ *
+ * @param {ChatMessage} message
+ * @returns {Promise<void>}
+ */
+function waitForDice(message) {
+  if (!game.modules?.get("dice-so-nice")?.active) return Promise.resolve();
+  const hasRolls = message.rolls?.length || message.flags?.pf1?.metadata?.rolls?.attacks?.length;
+  if (!hasRolls) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const hookId = Hooks.on("diceSoNiceRollComplete", (messageId) => {
+      if (messageId !== message.id) return;
+      done();
+    });
+    const timer = setTimeout(done, DICE_WAIT_TIMEOUT);
+    function done() {
+      clearTimeout(timer);
+      Hooks.off("diceSoNiceRollComplete", hookId);
+      resolve();
+    }
+  });
+}
 
 /**
  * Проверка, чьи сообщения обрабатываются.
@@ -148,10 +262,9 @@ function appliesTo(message) {
 
 /**
  * @param {ChatMessage} message
- * @param {HTMLElement} element
  * @returns {string|null} Ключ категории из CATEGORIES или null, если сообщение не трогаем.
  */
-function getCategory(message, element) {
+function getCategory(message) {
   const flags = message.flags?.pf1 ?? {};
 
   // 1. Броски d20 актёра: навыки, спасброски
@@ -163,7 +276,7 @@ function getCategory(message, element) {
 
   // 2. Карточки предметов и действий (атаки, заклинания, предметы)
   if (flags.metadata?.item) {
-    const base = itemCategory(message, flags.metadata, element);
+    const base = itemCategory(message, flags.metadata);
     if (!base) return null;
     const attackRolls = (flags.metadata.rolls?.attacks ?? []).map((a) => a?.attack).filter(Boolean);
     return critCategory(attackRolls) ?? base;
@@ -196,12 +309,11 @@ function subjectCategory(subject) {
  *
  * @param {ChatMessage} message
  * @param {object} metadata flags.pf1.metadata
- * @param {HTMLElement} element
  * @returns {string|null}
  */
-function itemCategory(message, metadata, element) {
+function itemCategory(message, metadata) {
   const item = findItem(message, metadata);
-  const itemType = item?.type ?? itemTypeFromDom(element);
+  const itemType = item?.type ?? itemTypeFromContent(message.content);
 
   if (itemType === "spell") return "spell";
 
@@ -240,17 +352,15 @@ function findItem(message, metadata) {
 }
 
 /**
- * Тип предмета из класса шапки карточки PF1 (`card-header type-<тип>`).
+ * Тип предмета из класса шапки карточки PF1 (`card-header type-color type-<тип>`).
  * Нужен, если предмет уже удалён (выпитое зелье и т.п.).
  *
- * @param {HTMLElement} element
+ * @param {string} content HTML сообщения
  * @returns {string|undefined}
  */
-function itemTypeFromDom(element) {
-  const header = element.querySelector(".pf1.chat-card .card-header");
-  if (!header) return undefined;
-  const cls = [...header.classList].find((c) => c.startsWith("type-") && c !== "type-color");
-  return cls?.slice(5);
+function itemTypeFromContent(content) {
+  const header = String(content ?? "").match(/class="card-header[^"]*"/)?.[0] ?? "";
+  return header.match(/\btype-(?!color\b)([a-z]+)/)?.[1];
 }
 
 /**
@@ -300,60 +410,65 @@ function naturalD20(raw) {
 }
 
 /* -------------------------------------------- */
-/*  Подмена картинки                            */
+/*  Показ картинки                              */
 /* -------------------------------------------- */
 
+let hideTimer = null;
+
 /**
- * @param {HTMLElement} element Корень сообщения
+ * Показывает картинку слева от боковой панели чата. Новая картинка заменяет предыдущую.
+ *
  * @param {string} src Путь к картинке
  * @param {string} category
  */
-function applyImage(element, src, category) {
-  const size = Number(setting("size")) || 48;
+function showImage(src, category) {
+  const size = Number(setting("size")) || 320;
+  const opacity = Number(setting("opacity")) || 1;
+  const fade = Math.min(50, Math.max(0, Number(setting("fade")) || 0));
+  const duration = (Number(setting("duration")) || 4) * 1000;
 
-  const existing = element.querySelector(".pf1.chat-card .card-header img");
-  if (existing) {
-    const original = existing.getAttribute("src");
-    const originalStyle = existing.getAttribute("style");
-    existing.addEventListener("error", () => restore(existing, original, originalStyle), { once: true });
-    existing.src = src;
-    existing.classList.add("pf1-chat-images-replaced");
-    existing.dataset.pf1ChatImagesCategory = category;
-    setSize(existing, size);
-    return;
-  }
+  document.getElementById(`${MODULE_ID}-popup`)?.remove();
+  clearTimeout(hideTimer);
 
-  // В бросках навыков и спасбросков своей картинки нет: вставляем сверху
-  const content = element.querySelector(".message-content");
-  if (!content || content.querySelector(".pf1-chat-images-banner")) return;
-
-  const banner = document.createElement("div");
-  banner.classList.add("pf1-chat-images-banner");
   const img = document.createElement("img");
-  img.src = src;
+  img.id = `${MODULE_ID}-popup`;
+  img.className = `${MODULE_ID}-popup`;
   img.alt = "";
-  img.dataset.pf1ChatImagesCategory = category;
-  setSize(img, size);
-  img.addEventListener("error", () => banner.remove(), { once: true });
-  banner.append(img);
-  content.prepend(banner);
+  img.dataset.category = category;
+  img.style.setProperty("--pf1-chat-images-opacity", String(opacity));
+  img.style.setProperty("--pf1-chat-images-fade", `${fade}%`);
+  img.style.maxWidth = `${size}px`;
+  img.style.maxHeight = `${size}px`;
+  placeNextToSidebar(img);
+
+  img.addEventListener("error", () => {
+    img.remove();
+    console.warn(`${MODULE_ID} | Картинка не найдена для категории «${category}»: ${src}`);
+  }, { once: true });
+  img.addEventListener("load", () => {
+    requestAnimationFrame(() => img.classList.add("visible"));
+    hideTimer = setTimeout(() => {
+      img.classList.remove("visible");
+      img.addEventListener("transitionend", () => img.remove(), { once: true });
+      // На случай, если переход не сработал (вкладка в фоне и т.п.)
+      setTimeout(() => img.remove(), 1500);
+    }, duration);
+  }, { once: true });
+
+  img.src = src;
+  document.body.append(img);
 }
 
-function setSize(img, size) {
-  img.width = size;
-  img.height = size;
-  img.style.width = `${size}px`;
-  img.style.height = `${size}px`;
-  img.style.flex = `0 0 ${size}px`;
-}
-
-/** Если подготовленной картинки нет, возвращает исходную. */
-function restore(img, original, originalStyle) {
-  img.classList.remove("pf1-chat-images-replaced");
-  img.width = 36;
-  img.height = 36;
-  if (originalStyle) img.setAttribute("style", originalStyle);
-  else img.removeAttribute("style");
-  if (original) img.src = original;
-  console.warn(`${MODULE_ID} | Картинка не найдена для категории «${img.dataset.pf1ChatImagesCategory}»`);
+/**
+ * Ставит картинку у левого края боковой панели, внизу, на уровне чата.
+ *
+ * @param {HTMLElement} img
+ */
+function placeNextToSidebar(img) {
+  const sidebar = document.getElementById("sidebar");
+  const rect = sidebar?.getBoundingClientRect();
+  const gap = 12;
+  const right = rect && rect.width ? window.innerWidth - rect.left + gap : gap;
+  img.style.right = `${right}px`;
+  img.style.bottom = `${gap * 2}px`;
 }

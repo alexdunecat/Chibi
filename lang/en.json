@@ -2,8 +2,8 @@
   "pf1-chat-images": {
     "Settings": {
       "Enabled": {
-        "Name": "Enable image replacement",
-        "Hint": "When disabled, chat looks as usual."
+        "Name": "Enable images",
+        "Hint": "When disabled, no one sees the images."
       },
       "Audience": {
         "Name": "Whose messages to change",
@@ -17,10 +17,34 @@
         "Hint": "Natural 20 or 1 on a d20 (attack, skill, save) shows the critical success or failure image instead. Take 10/20 does not count."
       },
       "Size": {
-        "Name": "Image size, px",
-        "Hint": "Width and height of the chat image. PF1 default is 36."
+        "Name": "Maximum size, px",
+        "Hint": "The image fits into a square of this size, keeping proportions."
       },
-      "ImageHint": "Leave empty to keep the original image for this category. If the file is missing, the original image stays."
+      "ImageHint": "Leave empty to show no image for this category.",
+      "Chance": {
+        "Name": "Show chance, %",
+        "Hint": "Probability that an image appears for an action. Everyone sees the same result."
+      },
+      "CritAlways": {
+        "Name": "Always show crits",
+        "Hint": "Critical success and failure images appear on every crit, ignoring the chance."
+      },
+      "Opacity": {
+        "Name": "Opacity",
+        "Hint": "1 is fully opaque, lower values are see-through."
+      },
+      "Fade": {
+        "Name": "Edge gradient width, %",
+        "Hint": "How softly the image edges fade into the background. 0 means hard edges."
+      },
+      "Duration": {
+        "Name": "Display time, seconds",
+        "Hint": "Time before the image starts fading out."
+      },
+      "ShowForMe": {
+        "Name": "Show to me",
+        "Hint": "Personal setting: turn the images off just for yourself."
+      }
     },
     "Category": {
       "spell": "Image: spellcasting",
