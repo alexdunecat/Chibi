@@ -1,0 +1,39 @@
+{
+  "pf1-chat-images": {
+    "Settings": {
+      "Enabled": {
+        "Name": "Enable image replacement",
+        "Hint": "When disabled, chat looks as usual."
+      },
+      "Audience": {
+        "Name": "Whose messages to change",
+        "Hint": "By default only messages sent by players (not the GM).",
+        "Players": "Player messages only",
+        "PlayerActors": "Messages of player-owned actors (even if rolled by GM)",
+        "All": "All messages, including GM"
+      },
+      "CritOverride": {
+        "Name": "Crits override category",
+        "Hint": "Natural 20 or 1 on a d20 (attack, skill, save) shows the critical success or failure image instead. Take 10/20 does not count."
+      },
+      "Size": {
+        "Name": "Image size, px",
+        "Hint": "Width and height of the chat image. PF1 default is 36."
+      },
+      "ImageHint": "Leave empty to keep the original image for this category. If the file is missing, the original image stays."
+    },
+    "Category": {
+      "spell": "Image: spellcasting",
+      "melee": "Image: melee attack",
+      "ranged": "Image: ranged attack",
+      "critSuccess": "Image: critical success",
+      "critFailure": "Image: critical failure",
+      "knowledge": "Image: knowledge check",
+      "skill": "Image: other skills",
+      "saveWill": "Image: Will save",
+      "saveFort": "Image: Fortitude save",
+      "saveRef": "Image: Reflex save",
+      "itemUse": "Image: item use"
+    }
+  }
+}

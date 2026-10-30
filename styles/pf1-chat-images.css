@@ -1,0 +1,17 @@
+/* Картинка, вставленная в сообщения без собственной (навыки, спасброски) */
+.pf1-chat-images-banner {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.pf1-chat-images-banner img {
+  flex: 0 0 auto;
+  border: none;
+  object-fit: contain;
+}
+
+/* Подменённая картинка в шапке карточки PF1 */
+.chat-message .card-header img.pf1-chat-images-replaced {
+  object-fit: contain;
+}
