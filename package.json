@@ -1,0 +1,11 @@
+{
+  "name": "pf1-chat-images",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/categories.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "24.1.0"
+  }
+}
