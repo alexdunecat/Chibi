@@ -1,17 +1,40 @@
-/* Картинка, вставленная в сообщения без собственной (навыки, спасброски) */
-.pf1-chat-images-banner {
-  display: flex;
-  align-items: center;
-  margin-bottom: 4px;
-}
+/* Картинка, всплывающая слева от боковой панели чата */
+.pf1-chat-images-popup {
+  --pf1-chat-images-opacity: 1;
+  --pf1-chat-images-fade: 20%;
+  --pf1-chat-images-edge: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--pf1-chat-images-fade),
+    #000 calc(100% - var(--pf1-chat-images-fade)),
+    transparent
+  );
+  --pf1-chat-images-edge-v: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--pf1-chat-images-fade),
+    #000 calc(100% - var(--pf1-chat-images-fade)),
+    transparent
+  );
 
-.pf1-chat-images-banner img {
-  flex: 0 0 auto;
+  position: fixed;
+  z-index: 70;
+  width: auto;
+  height: auto;
   border: none;
-  object-fit: contain;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(16px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+
+  /* Края плавно растворяются по всем четырём сторонам */
+  -webkit-mask-image: var(--pf1-chat-images-edge), var(--pf1-chat-images-edge-v);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--pf1-chat-images-edge), var(--pf1-chat-images-edge-v);
+  mask-composite: intersect;
 }
 
-/* Подменённая картинка в шапке карточки PF1 */
-.chat-message .card-header img.pf1-chat-images-replaced {
-  object-fit: contain;
+.pf1-chat-images-popup.visible {
+  opacity: var(--pf1-chat-images-opacity);
+  transform: translateX(0);
 }

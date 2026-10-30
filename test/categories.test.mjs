@@ -1,5 +1,5 @@
 /**
- * Проверка определения категорий на заглушках Foundry/PF1.
+ * Проверка категорий и показа картинок на заглушках Foundry/PF1.
  * Запуск: npm test
  */
 
@@ -64,23 +64,33 @@ before(async () => {
 
   await import("../scripts/main.mjs");
   hooks.init();
+  settings.chance = 100;
 });
 
 const PLAYER = { isGM: false };
 const GM = { isGM: true };
 
 const card = (type) =>
-  `<div class="message-content"><div class="pf1 chat-card">` +
-  `<header class="card-header type-color type-${type} flexrow"><img src="orig.png"></header>` +
-  `</div></div>`;
-const plain = `<div class="message-content"></div>`;
+  `<div class="pf1 chat-card item-card"><header class="card-header type-color type-${type} flexrow">` +
+  `<img src="icon.png"></header></div>`;
+const plain = "";
 
-/** Отрисовать сообщение и вернуть src итоговой картинки (или null). */
-function render(message, html, { user = PLAYER, actor = "Actor.pc" } = {}) {
-  const el = document.createElement("li");
-  el.innerHTML = html;
-  hooks.renderChatMessage({ id: "msg", speaker: { actor }, user, rolls: [], ...message }, [el]);
-  return el.querySelector("img")?.getAttribute("src") ?? null;
+let nextId = 0;
+
+/** Создать сообщение и вернуть src всплывшей картинки (или null). */
+async function render(message, content, { user = PLAYER, actor = "Actor.pc", id = `msg${nextId++}` } = {}) {
+  document.body.innerHTML = "";
+  await hooks.createChatMessage({
+    id,
+    speaker: { actor },
+    user,
+    rolls: [],
+    content,
+    visible: true,
+    isContentVisible: true,
+    ...message,
+  });
+  return document.querySelector(".pf1-chat-images-popup")?.getAttribute("src") ?? null;
 }
 
 const itemMessage = (item, naturals = []) => ({
@@ -103,87 +113,141 @@ const rollMessage = (subject, nat, options) => ({
 
 const img = (category) => `chat-images/${category}.webp`;
 
-test("атаки", () => {
-  assert.equal(render(itemMessage("sword", [12]), card("weapon")), img("melee"));
-  assert.equal(render(itemMessage("bow", [5]), card("weapon")), img("ranged"));
-  assert.equal(render(itemMessage("javelin", [5]), card("weapon")), img("ranged"));
+test("атаки", async () => {
+  assert.equal(await render(itemMessage("sword", [12]), card("weapon")), img("melee"));
+  assert.equal(await render(itemMessage("bow", [5]), card("weapon")), img("ranged"));
+  assert.equal(await render(itemMessage("javelin", [5]), card("weapon")), img("ranged"));
 });
 
-test("заклинания", () => {
-  assert.equal(render(itemMessage("fireball"), card("spell")), img("spell"));
-  assert.equal(render(itemMessage("rayOfFrost", [9]), card("spell")), img("spell"));
+test("заклинания", async () => {
+  assert.equal(await render(itemMessage("fireball"), card("spell")), img("spell"));
+  assert.equal(await render(itemMessage("rayOfFrost", [9]), card("spell")), img("spell"));
 });
 
-test("применение предметов", () => {
-  assert.equal(render(itemMessage("potion"), card("consumable")), img("itemUse"));
-  assert.equal(render(itemMessage("rope"), card("equipment")), img("itemUse"));
+test("применение предметов", async () => {
+  assert.equal(await render(itemMessage("potion"), card("consumable")), img("itemUse"));
+  assert.equal(await render(itemMessage("rope"), card("equipment")), img("itemUse"));
   // Израсходованный предмет: тип берётся из шапки карточки
-  assert.equal(render(itemMessage("gone"), card("consumable")), img("itemUse"));
+  assert.equal(await render(itemMessage("gone"), card("consumable")), img("itemUse"));
 });
 
-test("черты и прочее не трогаются", () => {
-  assert.equal(render(itemMessage("feat"), card("feat")), "orig.png");
-  assert.equal(render(rollMessage({ core: "init" }, 7), plain), null);
-  assert.equal(render(rollMessage({ ability: "str" }, 7), plain), null);
+test("черты и прочее не трогаются", async () => {
+  assert.equal(await render(itemMessage("feat"), card("feat")), null);
+  assert.equal(await render(rollMessage({ core: "init" }, 7), plain), null);
+  assert.equal(await render(rollMessage({ ability: "str" }, 7), plain), null);
 });
 
-test("навыки", () => {
-  assert.equal(render(rollMessage({ skill: "kna" }, 10), plain), img("knowledge"));
-  assert.equal(render(rollMessage({ skill: "kpl" }, 10), plain), img("knowledge"));
-  assert.equal(render(rollMessage({ skill: "per" }, 10), plain), img("skill"));
-  assert.equal(render(rollMessage({ skill: "crf.crf1" }, 10), plain), img("skill"));
+test("навыки", async () => {
+  assert.equal(await render(rollMessage({ skill: "kna" }, 10), plain), img("knowledge"));
+  assert.equal(await render(rollMessage({ skill: "kpl" }, 10), plain), img("knowledge"));
+  assert.equal(await render(rollMessage({ skill: "per" }, 10), plain), img("skill"));
+  assert.equal(await render(rollMessage({ skill: "crf.crf1" }, 10), plain), img("skill"));
 });
 
-test("спасброски", () => {
-  assert.equal(render(rollMessage({ save: "will" }, 7), plain), img("saveWill"));
-  assert.equal(render(rollMessage({ save: "fort" }, 7), plain), img("saveFort"));
-  assert.equal(render(rollMessage({ save: "ref" }, 7), plain), img("saveRef"));
+test("спасброски", async () => {
+  assert.equal(await render(rollMessage({ save: "will" }, 7), plain), img("saveWill"));
+  assert.equal(await render(rollMessage({ save: "fort" }, 7), plain), img("saveFort"));
+  assert.equal(await render(rollMessage({ save: "ref" }, 7), plain), img("saveRef"));
 });
 
-test("криты", () => {
-  assert.equal(render(itemMessage("sword", [20]), card("weapon")), img("critSuccess"));
-  assert.equal(render(itemMessage("bow", [1]), card("weapon")), img("critFailure"));
-  assert.equal(render(itemMessage("sword", [1, 20]), card("weapon")), img("critSuccess"));
-  assert.equal(render(rollMessage({ save: "ref" }, 20), plain), img("critSuccess"));
-  assert.equal(render(rollMessage({ skill: "per" }, 1), plain), img("critFailure"));
+test("криты", async () => {
+  assert.equal(await render(itemMessage("sword", [20]), card("weapon")), img("critSuccess"));
+  assert.equal(await render(itemMessage("bow", [1]), card("weapon")), img("critFailure"));
+  assert.equal(await render(itemMessage("sword", [1, 20]), card("weapon")), img("critSuccess"));
+  assert.equal(await render(rollMessage({ save: "ref" }, 20), plain), img("critSuccess"));
+  assert.equal(await render(rollMessage({ skill: "per" }, 1), plain), img("critFailure"));
   // «Взять 20» критом не считается
-  assert.equal(render(rollMessage({ skill: "per" }, 20, { staticRoll: 20 }), plain), img("skill"));
+  assert.equal(await render(rollMessage({ skill: "per" }, 20, { staticRoll: 20 }), plain), img("skill"));
 });
 
-test("крит можно отключить", () => {
+test("крит можно отключить", async () => {
   settings.critOverride = false;
   try {
-    assert.equal(render(itemMessage("sword", [20]), card("weapon")), img("melee"));
+    assert.equal(await render(itemMessage("sword", [20]), card("weapon")), img("melee"));
   } finally {
     settings.critOverride = true;
   }
 });
 
-test("чьи сообщения меняются", () => {
+test("чьи сообщения меняются", async () => {
   const msg = itemMessage("sword", [12]);
-  assert.equal(render(msg, card("weapon"), { user: GM }), "orig.png");
+  assert.equal(await render(msg, card("weapon"), { user: GM }), null);
 
   settings.audience = "playerActors";
   try {
-    assert.equal(render(msg, card("weapon"), { user: GM }), img("melee"));
-    assert.equal(render(msg, card("weapon"), { user: GM, actor: "Actor.npc" }), "orig.png");
+    assert.equal(await render(msg, card("weapon"), { user: GM }), img("melee"));
+    assert.equal(await render(msg, card("weapon"), { user: GM, actor: "Actor.npc" }), null);
   } finally {
     settings.audience = "players";
   }
 
   settings.audience = "all";
   try {
-    assert.equal(render(msg, card("weapon"), { user: GM, actor: "Actor.npc" }), img("melee"));
+    assert.equal(await render(msg, card("weapon"), { user: GM, actor: "Actor.npc" }), img("melee"));
   } finally {
     settings.audience = "players";
   }
 });
 
-test("пустой путь оставляет исходную картинку", () => {
+test("пустой путь: картинка не показывается", async () => {
   settings["img.melee"] = "";
   try {
-    assert.equal(render(itemMessage("sword", [12]), card("weapon")), "orig.png");
+    assert.equal(await render(itemMessage("sword", [12]), card("weapon")), null);
   } finally {
     settings["img.melee"] = img("melee");
   }
+});
+
+test("шанс показа", async () => {
+  settings.chance = 50;
+  try {
+    const shown = [];
+    for (let i = 0; i < 200; i++) {
+      shown.push(await render(rollMessage({ save: "will" }, 7), plain, { id: `chance${i}` }));
+    }
+    const count = shown.filter(Boolean).length;
+    assert.ok(count > 60 && count < 140, `показано ${count} из 200`);
+
+    // Результат одинаков для одного и того же сообщения (у всех участников)
+    const again = await render(rollMessage({ save: "will" }, 7), plain, { id: "chance7" });
+    assert.equal(again, shown[7]);
+
+    settings.chance = 0;
+    assert.equal(await render(rollMessage({ save: "will" }, 7), plain), null);
+    // Криты по умолчанию показываются всегда
+    assert.equal(await render(rollMessage({ save: "will" }, 20), plain), img("critSuccess"));
+    settings.critAlways = false;
+    assert.equal(await render(rollMessage({ save: "will" }, 20), plain), null);
+  } finally {
+    settings.chance = 100;
+    settings.critAlways = true;
+  }
+});
+
+test("скрытые броски не раскрываются", async () => {
+  assert.equal(await render({ ...rollMessage({ save: "will" }, 7), visible: false }, plain), null);
+  assert.equal(await render({ ...rollMessage({ save: "will" }, 7), isContentVisible: false }, plain), null);
+});
+
+test("можно выключить только у себя", async () => {
+  settings.showForMe = false;
+  try {
+    assert.equal(await render(rollMessage({ save: "will" }, 7), plain), null);
+  } finally {
+    settings.showForMe = true;
+  }
+});
+
+test("новая картинка заменяет предыдущую", async () => {
+  await hooks.createChatMessage({
+    id: "a", speaker: { actor: "Actor.pc" }, user: PLAYER, content: "", visible: true, isContentVisible: true,
+    ...rollMessage({ save: "will" }, 7),
+  });
+  await hooks.createChatMessage({
+    id: "b", speaker: { actor: "Actor.pc" }, user: PLAYER, content: "", visible: true, isContentVisible: true,
+    ...rollMessage({ save: "ref" }, 7),
+  });
+  const popups = document.querySelectorAll(".pf1-chat-images-popup");
+  assert.equal(popups.length, 1);
+  assert.equal(popups[0].getAttribute("src"), img("saveRef"));
 });

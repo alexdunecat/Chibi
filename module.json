@@ -1,8 +1,8 @@
 {
   "id": "pf1-chat-images",
   "title": "PF1 Chat Images",
-  "description": "Заменяет картинку в карточках чата игроков на заранее подготовленные изображения по типу действия: заклинание, атака, крит, навык, спасбросок, использование предмета.",
-  "version": "1.0.0",
+  "description": "Когда игрок совершает действие, с заданным шансом показывает слева от чата подготовленную картинку по типу действия: заклинание, атака, крит, навык, спасбросок, использование предмета.",
+  "version": "2.0.0",
   "authors": [
     {
       "name": "Александр"
@@ -10,7 +10,7 @@
   ],
   "url": "https://github.com/alexdunecat/Chibi",
   "manifest": "https://github.com/alexdunecat/Chibi/releases/latest/download/module.json",
-  "download": "https://github.com/alexdunecat/Chibi/releases/download/v1.0.0/module.zip",
+  "download": "https://github.com/alexdunecat/Chibi/releases/download/v2.0.0/module.zip",
   "compatibility": {
     "minimum": "11",
     "verified": "11.315",
